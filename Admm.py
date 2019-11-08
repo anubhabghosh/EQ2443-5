@@ -6,20 +6,24 @@ def optimize_admm(T, Y, mu, max_iterations):
     # Input parameters: Target (T), mu (reg. param) and Hidden actiavtion Y(g(WX))
 
     # Initialise Values 
-    q_k = np.random.rand(T.shape[0], len(Y))
-    O_k = np.random.rand(T.shape[0], len(Y))
-    lambda_k = np.random.rand(T.shape[0], len(Y))
+    q_k = np.zeros((T.shape[0], len(Y)))
+    #O_k = np.zeros(T.shape[0], len(Y))
+    lambda_k = np.zeros((T.shape[0], len(Y)))
+    eps = 2*np.sqrt(T.shape[0])
+    inv_matrix = np.linalg.inv(np.dot(Y, Y.T) + (1/mu)*np.eye(Y.shape[0]))
 
     for it in range(max_iterations):
 
         lambda_prev = copy.deepcopy(lambda_k)
-
-        O_k = np.dot((np.dot(T, Y.T) + (1/mu)*(q_k + lambda_k)), \
-              np.linalg.inv(np.dot(Y, Y.T) + (1/mu)*np.eye(Y.shape[0])))
-
-        if np.linalg.norm(q_k, ord='fro') != 0:
-            proj_matrix = np.dot(q_k, np.dot(np.linalg.inv(np.dot(q_k.T, q_k)), q_k.T))
-            q_k = np.dot(proj_matrix, (O_k - lambda_k))
+        O_k = np.dot((np.dot(T, Y.T) + (1/mu)*(q_k + lambda_k)), inv_matrix)
+        project_item = O_k - lambda_k
+        
+        if np.linalg.norm(project_item) > eps:
+            proj_matrix = eps/np.linalg.norm(project_item)
+            q_k = np.dot(proj_matrix, project_item)
+        else:
+            proj_matrix = 1
+            q_k = np.dot(proj_matrix, project_item)
         
         lambda_k = lambda_k + q_k - O_k
         error = np.linalg.norm(lambda_k - lambda_prev)

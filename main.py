@@ -51,13 +51,31 @@ def compute_Wls(X,T,lam):
     W_ls = np.dot(np.dot(T, X.T), np.linalg.inv(np.dot(X, X.T)+lam*np.eye(X.shape[0])))
     print(W_ls.shape)
     Q = T.shape[0]
-
     return W_ls
 
 def compute_ol(Y,T,mu, max_iterations):
 
     ol = optimize_admm(T, Y, mu, max_iterations)
     return ol
+
+def compute_accuracy(predicted_lbl, true_lbl):
+
+    acc = 100.*np.mean(np.argmax(predicted_lbl,axis=0)==np.argmax(true_lbl,axis=0))
+    return acc
+
+def compute_test_outputs(PLN_object_array, W_ls, num_layers, X_test, Y_test):
+
+    PLN_1 = PLN_object_array[0]
+    W_initial = np.concatenate((np.dot(PLN_1.V_Q, W_ls), PLN_1.R_l), axis=0)
+    y = PLN_1.activation_function(np.dot(W_initial, X_test))
+
+    for i in range(1, num_layers-1):
+        PLN_l = PLN_object_array[i]
+        W = np.concatenate((np.dot(PLN_l.V_Q, PLN_object_array[i-1].O_l), PLN_l.R_l), axis=0)
+        y = PLN_l.activation_function(np.dot(W, y))
+
+    return np.dot(PLN_object_array[num_layers - 1].O_l, y)
+
 
 def main():
 
@@ -70,13 +88,37 @@ def main():
     Wls = compute_Wls(X_train,Y_train,lamda_ls)
     print(Q)
 
+    # Creating a list of PLN Objects
+    PLN_objects = []
+    no_layers = 2
+
     # Creating a 1 layer Network
-    no_layers = 1
     num_class = Y_train.shape[0]
     num_node = 2*num_class + 1000
-    pln_l1 = PLN(Q, X_train, no_layers, num_node, W_ls = Wls)
-    pln_l1.Y_l = None #TODO: To be computed as g(WX)
+    layer_no = 1
+    pln_l1 = PLN(Q, X_train, layer_no, num_node, W_ls = Wls)
+    pln_l1_W = np.concatenate((np.dot(pln_l1.V_Q,Wls), pln_l1.R_l),axis=0)
+    pln_l1_Z_l = np.dot(pln_l1_W, X_train)
+    pln_l1.Y_l = pln_l1.activation_function(pln_l1_Z_l) #TODO: To be computed as g(WX)
+    
+    #pln_l1.O_l = compute_ol(pln_l1.Y_l, Y_train, mu, max_iterations)
     pln_l1.O_l = compute_ol(pln_l1.Y_l, Y_train, mu, max_iterations)
+
+    # Appending the first layer object to the PLN set
+    PLN_objects.append(pln_l1)
+
+    # ADMM Training for all the layers using the training Data
+    for i in range(1, no_layers):
+
+        print("ADMM for Layer No:{}".format(i))
+        X = PLN_objects[i-1].Y_l # Input for the previous layer
+        num_node = 2*Q + 1000 # No. of nodes fixed for every layer
+        pln = PLN(Q, X, i, num_node, W_ls=None)
+        pln_W = np.concatenate((np.dot(pln_l1.V_Q,Wls), pln_l1.R_l),axis=0)
+        pln_Z_l = np.dot(pln_W, X)
+        pln.Y_l = pln.activation_function(pln_Z_l) #TODO: To be computed as g(WX)
+        pln.O_l = compute_ol(pln.Y_l, Y_train, mu, max_iterations)
+        PLN_objects.append(pln)
 
     return None
 
