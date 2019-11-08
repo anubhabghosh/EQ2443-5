@@ -90,7 +90,7 @@ def main():
 
     # Creating a list of PLN Objects
     PLN_objects = []
-    no_layers = 2
+    no_layers = 5
 
     # Creating a 1 layer Network
     num_class = Y_train.shape[0]

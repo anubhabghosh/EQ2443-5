@@ -11,11 +11,11 @@ class PLN():
         self.R_l = self.initialise_random_matrix(n_hidden - 2*Q, X.shape[0])
         self.O_l = self.initialise_random_matrix(n_hidden, Q)# Needs to be optimized by SGD/ADMM
         self.Y_l = np.zeros((n_hidden,1))
-        if W_ls.all() == None:
-            pass
-        else:
-            self.W_ls = W_ls
-        return None
+        #if W_ls.all() == None:
+        #    pass
+        #else:
+        #    self.W_ls = W_ls
+        #return None
 
     # Computes element wise activation 
     def activation_function(self, Z):
