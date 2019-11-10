@@ -22,5 +22,7 @@ class PLN():
         return np.where(Z >=0, Z, 0)
 
     def initialise_random_matrix(self,M,N):
-        return np.random.rand(M,N)
+        return np.random.normal(0, 1, size=(M, N))
         
+    def normalization(self, A):
+        return A / np.sum(A**2, axis=0, keepdims=True)**(1/2)
