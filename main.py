@@ -4,20 +4,11 @@ import sklearn.linear_model
 import scipy.io as sio
 from PLN_Class import PLN
 from Admm import optimize_admm
+from LoadDataFromMat import importData
 import numpy as np
 
+
 # Import the dataset and calculate related parameters
-def importData(dataset_path):
-
-    Data_dicts = sio.loadmat(dataset_path)
-    X_train = Data_dicts['train_x'].astype(np.float32) # The input training data
-    Y_train = Data_dicts['train_y'].astype(np.float32) # The input trainign target
-    X_test = Data_dicts['test_x'].astype(np.float32) # The input test data
-    Y_test = Data_dicts['test_y'].astype(np.float32) # The input test labels
-
-    Q = Y_train.shape[0] # No.of classes in the target spaces
-
-    return X_train, Y_train, X_test, Y_test, Q
 
 def importDummyExample():
     # Dummy example for checking PLN
@@ -34,11 +25,6 @@ def importDummyExample():
                   [0,0,0,0,0,0,1,1,0,0],
                   [0,0,0,0,0,0,0,0,1,1]])
     print(T.shape)
-    #for i in range(10)
-    #    T[i] =
-    return X, T
-    X = None
-    T = None
     Q = 0
     return X, T, Q
 
@@ -82,13 +68,23 @@ def compute_test_outputs(PLN_object_array, W_ls, num_layers, X_test):
 
     return np.dot(PLN_object_array[num_layers - 1].O_l, y)
 
+# This function computes the Normalized Mean Error (NME) in dB scale
+def compute_NME(predicted_lbl, actual_lbl):
+
+    num = np.mean(np.linalg.norm((predicted_lbl-actual_lbl), axis=0)**2)
+    den = np.mean(np.linalg.norm((actual_lbl), axis=0)**2)
+    NME = 10 * np.log10(num/den)
+    return NME
+
 def main():
 
     #X, T = importDummyExample()
-    dataset_path = "./Satimage.mat"
+    dataset_path = "../Datasets/" # Specify the dataset path in the Local without the name
+    dataset_name = "Vowel" # Specify the Dataset name without extension (implicitly .mat extension is assumed)
+    X_train, Y_train, X_test, Y_test, Q = importData(dataset_path, dataset_name) # Imports the data with the no. of output classes
     mu = 1e5 # For the given dataset
     max_iterations = 100 # For the ADMM Algorithm
-    X_train, Y_train, X_test, Y_test, Q = importData(dataset_path)
+    #X_train, Y_train, X_test, Y_test, Q = importData(dataset_path)
 
     lambda_ls = 1e6 # Given regularization parameter as used in the paper
     Wls = compute_Wls(X_train, Y_train, lambda_ls)
@@ -100,47 +96,75 @@ def main():
     predict_test = np.dot(Wls, X_test)
     acc_train = compute_accuracy(predict_train, Y_train)
     acc_test = compute_accuracy(predict_test, Y_test)
+    nme_test = compute_NME(predict_test, Y_test)
     print("Train and test accuracies are: {} and {}".format(acc_train, acc_test))
-    
+    print("NME Test:{}".format(nme_test))
     # Creating a list of PLN Objects
     
     PLN_objects = []
-    no_layers = 20
+    no_layers = 20 # Total number of layers to be useds
 
     # Creating a 1 layer Network
-    num_class = Y_train.shape[0]
-    num_node = 2*num_class + 1000
-    layer_no = 1
-    pln_l1 = PLN(Q, X_train, layer_no, num_node, W_ls = Wls)
-    W_top = np.dot(np.dot(pln_l1 .V_Q, Wls), X_train)
-    W_bottom = pln_l1.normalization(np.dot(pln_l1.R_l, X_train))
-    pln_l1_Z_l = np.concatenate((W_top, W_bottom), axis=0)
-    pln_l1.Y_l = pln_l1.activation_function(pln_l1_Z_l) #TODO: To be computed as g(WX)
     
-    #pln_l1.O_l = compute_ol(pln_l1.Y_l, Y_train, mu, max_iterations)
-    pln_l1.O_l = compute_ol(pln_l1.Y_l, Y_train, mu, max_iterations)
-    PLN_objects.append(pln_l1)
-    predicted_lbl = compute_test_outputs(PLN_objects, Wls, 1, X_test)
-    print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl, Y_test)))
+    num_class = Y_train.shape[0] # Number of classes in the given network
+    num_node = 2*num_class + 1000 # Number of nodes in every layer (fixed in this case)
+    layer_no = 0 # Layer Number/Index (0 to L-1)
 
-    # ADMM Training for all the layers using the training Data
+    # Create an object of PLN Class
+    pln_l1 = PLN(Q, X_train, layer_no, num_node, W_ls = Wls) 
+    
+    # Compute the top part of the Composite Weight Matrix
+    W_top = np.dot(np.dot(pln_l1 .V_Q, Wls), X_train)
+
+    # Compute the Bottom part of the Composite Weight Matrix and inner product with input, along with including normalization
+    W_bottom = pln_l1.normalization(np.dot(pln_l1.R_l, X_train)) # Normalization performed is for the random matrix
+
+    # Concatenating the outputs to form W*X 
+    pln_l1_Z_l = np.concatenate((W_top, W_bottom), axis=0)
+
+    # Then applying the activation function g(.)
+    pln_l1.Y_l = pln_l1.activation_function(pln_l1_Z_l) 
+
+    # Computing the Output Matrix by using 100 iterations of ADMM
+    pln_l1.O_l = compute_ol(pln_l1.Y_l, Y_train, mu, max_iterations)
+
+    # Appending the creating object for every layer to a list, which constitutes the 'network' 
+    PLN_objects.append(pln_l1)
+    predicted_lbl = compute_test_outputs(PLN_objects, Wls, 1, X_test) # Predicts the test performance of the networks
+    print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl, Y_test)))
+    print("Test NME:{}".format(compute_NME(predicted_lbl, Y_test)))
+    # ADMM Training for all the remaining layers using the training Data
+    # Also involves subsequent testing on the test data
     
     for i in range(1, no_layers):
 
         print("ADMM for Layer No:{}".format(i))
-        X = PLN_objects[i-1].Y_l # Input for the previous layer
+        X = PLN_objects[i-1].Y_l # Input is the Output g(WX) for the previous layer
         num_node = 2*Q + 1000 # No. of nodes fixed for every layer
-        pln = PLN(Q, X, i, num_node, W_ls=None)
-        pln_W = np.concatenate((np.dot(pln.V_Q,PLN_objects[i-1].O_l), pln.R_l),axis=0)
+        pln = PLN(Q, X, i, num_node, W_ls=None) # Creating the PLN Object for the new layer
+
+        # Compute the top part of the Composite Weight Matrix
         W_top = np.dot(np.dot(pln.V_Q,PLN_objects[i-1].O_l), X)
+
+        # Compute the bottom part of the Composite Weight Matrix
         W_bottom = pln.normalization(np.dot(pln.R_l, X))
+
+        # Concatenate the top and bottom part of the matrix
         pln_Z_l = np.concatenate((W_top, W_bottom), axis=0)
-        pln.Y_l = pln.activation_function(pln_Z_l) #TODO: To be computed as g(WX)
+
+        # Apply the activation function
+        pln.Y_l = pln.activation_function(pln_Z_l) 
+
+        # Compute the output matrix using ADMM for specified no. of iterations
         pln.O_l = compute_ol(pln.Y_l, Y_train, mu, max_iterations)
+
+        # Add the new layer to the 'Network' list
         PLN_objects.append(pln)
+
+        # Compute test accuracy for new appended networks
         predicted_lbl = compute_test_outputs(PLN_objects, Wls, i, X_test)
         print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl, Y_test)))
-
+        print("Test NME:{}".format(compute_NME(predicted_lbl, Y_test)))
     #predicted_lbl = compute_test_outputs(PLN_objects, Wls, no_layers, X_test)
     #print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl, Y_test)))
     
