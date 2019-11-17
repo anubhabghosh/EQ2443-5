@@ -46,7 +46,7 @@ def admm_sameset(T, Y, mu, max_iterations, O_prev, rho):
     lambda_k = np.zeros((T.shape[0], len(Y)))
     alpha = 2
     eps0 = alpha*np.sqrt(2*T.shape[0])
-    eps1 = eps0
+    eps1 = eps0/100 # 1000 for vowel and 100 for YaleB
     #inv_matrix1 = np.linalg.inv(np.dot(Y, Y.T) + (1/mu)*np.eye(Y.shape[0]))
     inv_matrix = np.linalg.inv((1+1/rho)*np.dot(Y,Y.T) + (1/mu)*np.eye(Y.shape[0]))
 
@@ -54,7 +54,7 @@ def admm_sameset(T, Y, mu, max_iterations, O_prev, rho):
     for it in range(max_iterations):
 
         lambda_prev = copy.deepcopy(lambda_k)
-        O_k = np.dot((np.dot(T, Y.T) + (1/mu)*(Z_k + lambda_k) - 1/rho * np.dot((W_k - np.dot(O_prev, Y) + S_k), Y.T)), inv_matrix)
+        O_k = np.dot((np.dot(T, Y.T) + (1/mu)*(Z_k + lambda_k) - (1/rho) * np.dot((W_k - np.dot(O_prev, Y) + S_k), Y.T)), inv_matrix)
         #project function
         project_item = O_k - lambda_k
         Z_k = project_fun(project_item, eps0)
