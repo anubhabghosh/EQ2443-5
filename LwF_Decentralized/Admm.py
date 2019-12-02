@@ -12,7 +12,7 @@ def optimize_admm(T, Y, mu, max_iterations):
     #O_k = np.zeros(T.shape[0], len(Y))
     lambda_k = np.zeros((T.shape[0], len(Y)))
     alpha = 2
-    eps = alpha*np.sqrt(2*T.shape[0])
+    eps = alpha*np.sqrt(alpha*T.shape[0])
     inv_matrix = np.linalg.inv(np.dot(Y, Y.T) + (1/mu)*np.eye(Y.shape[0]))
 
     for it in range(max_iterations):
@@ -76,7 +76,7 @@ def admm_sameset(T, Y, mu, max_iterations, O_prev, rho):
 
     return O_k
 
-   
+'''
 def admm_decent_W_Onetime(X, Y, W_matrix, lambda_k, lambda_index, z_k, cnvge_flag, rho: np.float32=1e-1, lambda_rate=1e2):
     # W is a list of W_ls matrices of all PLNs
     num_pln = len(W_matrix)
@@ -84,28 +84,22 @@ def admm_decent_W_Onetime(X, Y, W_matrix, lambda_k, lambda_index, z_k, cnvge_fla
     #lambda_prev = copy.deepcopy(lambda_k[lambda_index])
     Th = 2*np.sqrt(2*Y.shape[0])*0.001
     inv_matrix_xxt = np.linalg.inv(np.dot(X, X.T) + (1.0/rho)*np.eye(X.shape[0]))
- 
     W_ret = np.dot(np.dot(Y, X.T) + (1.0/rho)*(z_k - lambda_k[lambda_index]), inv_matrix_xxt)
-
     z_k=np.sum(W_matrix + lambda_k)/(rho*lambda_rate+ num_pln)
     #for i in range(num_pln):
     #    z_k=
     lambda_k[lambda_index] = lambda_k[lambda_index] + W_ret - z_k
-
     error = np.linalg.norm(W_ret - z_k)
     print("Residual error difference:{}".format(error))
     if error < Th:
         cnvge_flag = True
         print("Converge!")
     return W_ret, lambda_k[lambda_index], z_k, cnvge_flag
-
+'''
 def admm_decent_Only_W_Onetime(X, Y, lambda_k, z_k, rho: np.float32=1e-1 ):
-    #Th = 2*np.sqrt(2*Y.shape[0])*0.001
-    
+    #Th = 2*np.sqrt(2*Y.shape[0])*0.001 
     inv_matrix_xxt = np.linalg.inv(np.dot(X, X.T) + (1.0/rho)*np.eye(X.shape[0]))
- 
     W_ret = np.dot(np.dot(Y, X.T) + (1.0/rho)*(z_k - lambda_k), inv_matrix_xxt)
-
     return W_ret
 
 def admm_decent_Only_Z0_Onetime(lambda_k, O_matrix,num_pln, rho: np.float32=1e-1, lambda_rate=1e2):
@@ -116,20 +110,18 @@ def admm_decent_Only_Z0_Onetime(lambda_k, O_matrix,num_pln, rho: np.float32=1e-1
     return z_k
 
 def admm_decent_Only_O_Onetime(X, Y, lambda_k, z_k, mu: np.float32=1e-1):
-    
     inv_matrix_xxt = np.linalg.inv(np.dot(X, X.T) + (1.0/mu)*np.eye(X.shape[0]))
- 
     O_ret = np.dot(np.dot(Y, X.T) + (1.0/mu)*(z_k - lambda_k), inv_matrix_xxt)
     
     return O_ret
 
 def admm_decent_Only_Z_Onetime(lambda_k, O_matrix, dim, alpha = 2, proj_coef=10):
-    eps0 = alpha*np.sqrt(2*dim) * proj_coef
-    #Th= eps0*0.1  
+    #eps0 = alpha*np.sqrt(2*dim) * proj_coef 
+    eps0 = alpha*np.sqrt(2*dim) # Overfitting contsraint
     z_k = np.mean(O_matrix + lambda_k)
     z_k = project_fun(z_k, eps0)
     return z_k
-
+'''
 def admm_decent_O_Onetime(X, Y, O_matrix, lambda_k, lambda_index, z_k, cnvge_flag, mu: np.float32=1e-1, alpha = 2 ):
     # mu is the ratio weighting the other nodes to the local dataset.
     # O is a list of W_ls matrices of all PLNs
@@ -156,7 +148,7 @@ def admm_decent_O_Onetime(X, Y, O_matrix, lambda_k, lambda_index, z_k, cnvge_fla
         #cnvge_flag = True
         print("Converge!")
     return O_ret, lambda_k[lambda_index], z_k, cnvge_flag 
-
+'''
 def project_fun(project_item, eps):
     if np.linalg.norm(project_item, 'fro') > eps:
         proj_matrix = eps/np.linalg.norm(project_item, 'fro')

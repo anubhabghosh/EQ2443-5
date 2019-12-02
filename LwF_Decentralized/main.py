@@ -8,29 +8,9 @@ from LoadDataFromMat import importData
 import numpy as np
 from sklearn.model_selection import train_test_split
 from func_set import *
-
+import random
 
 # Import the dataset and calculate related parameters
-
-""" def importDummyExample():
-    # Dummy example for checking PLN
-    mean = np.array([0,0,0,0,0,0,0,0,0,0])
-    mean = mean.T
-    #print(mean.shape)
-    var = np.eye(10)
-    X = np.random.multivariate_normal(mean,var,10)
-    print(X.shape)
-    #T = np.zeros((10,5))
-    T = np.array([[1,1,0,0,0,0,0,0,0,0],
-                  [0,0,1,1,0,0,0,0,0,0],
-                  [0,0,0,0,1,1,0,0,0,0],
-                  [0,0,0,0,0,0,1,1,0,0],
-                  [0,0,0,0,0,0,0,0,1,1]])
-    print(T.shape)
-    Q = 0
-    return X, T, Q """
-
-
 # Compute the W_ls by solving a Least Squares Regularization problem
 #def compute_Wls(X,T,lam):
 
@@ -60,47 +40,57 @@ def split_training_set(X_train, Y_train, Section_num): # =4
 
 
 def optimize_O_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, X_test,Y_test, Q, mu: np.float32=1e-1, alpha = 2): #Signal_matrix, O_matrix, Lambda_k, Z_k,
+    
     num_nodes = len(pln_net)
     #Z_k = np.array([None]*num_nodes)
     #cnvge_flag = False
-    O_matrix = np.array([None]*num_nodes)
-    Lambda_k = np.array([None]*num_nodes)
-    Signal_matrix = np.array([None]*num_nodes)
+    O_matrix = np.array([None]*num_nodes) # Ouptut matrix for every node
+    Lambda_k = np.array([None]*num_nodes) # ADMM helping / auxillary variable
+    Signal_matrix = np.array([None]*num_nodes) # Represents the hidden activation
 
-    eps0 = alpha*np.sqrt(2* Q)
-    Th= eps0*1e-4
+    eps0 = alpha*np.sqrt(2*Q)
+    Th = eps0*1e-4
     
     for num_layer in range(pln_net[0].num_layer):
         #converge_flag = np.array([False]*num_nodes)
+        
         for i in range(num_nodes):
             if (num_layer==0):
-                pln_net[i].construct_one_layer(Y_train_whole[i], Q, X_train = X_train_whole[i])
+                #pln_net[i].construct_one_layer(Y_train_whole[i], Q, X_train = X_train_whole[i])
+                
+                if i > 0:
+                    pln_net[i].construct_one_layer(Y_train_whole[i], Q, X_train = X_train_whole[i], calculate_O=True, dec_flag=True, R_i = pln_net[0].pln[num_layer].R_l)
+                else:
+                    pln_net[i].construct_one_layer(Y_train_whole[i], Q, X_train = X_train_whole[i])
+                
             else:
-                pln_net[i].construct_one_layer(Y_train_whole[i], Q, calculate_O=False)
-
+                #pln_net[i].construct_one_layer(Y_train_whole[i], Q, calculate_O=False)
+                
+                if i > 0:
+                    pln_net[i].construct_one_layer(Y_train_whole[i], Q, X_train = None, calculate_O=False, dec_flag = True, R_i = pln_net[0].pln[num_layer].R_l)
+                else:
+                    pln_net[i].construct_one_layer(Y_train_whole[i], Q, X_train = None, calculate_O=False)
+                
             Signal_matrix[i] = pln_net[i].pln[num_layer].Y_l
             #O_matrix[i] = pln_net[i].pln[num_layer].O_l
             # Extract signal vector and O matrix
-            Z_k = O_matrix[i] = Lambda_k[i] = np.zeros( (Y_train_whole[i].shape[0], len(Signal_matrix[i])) )
+            
+            # Initialising these ADMM arrays
+            Z_k = np.zeros( (Y_train_whole[i].shape[0], len(Signal_matrix[i])))
+            O_matrix[i] = np.zeros( (Y_train_whole[i].shape[0], len(Signal_matrix[i])))
+            Lambda_k[i] = np.zeros( (Y_train_whole[i].shape[0], len(Signal_matrix[i])))
             #Z_k[i] = O_matrix[i] + Lambda_k[i]
-
-        #Z_k = np.mean(O_matrix)
-        
-        #print("Number of layer: {}. O Before joint optimization:".format(num_layer+1))
-
-        #for i in range(num_nodes):
-        #    predicted_lbl_test = pln_net[i].compute_test_outputs(X_test)
-        #    print("Testing Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test, Y_test)))
-        #    print("Testing NME:{}\n".format(compute_NME(predicted_lbl_test, Y_test))) 
         
         for _ in range(pln_net[0].max_iterations):
+            
             error = np.array([0.0]*num_nodes)
+            
             for i in range(num_nodes):
                 # Optimize O matrix first
                 O_matrix[i] = admm_decent_Only_O_Onetime(Signal_matrix[i], Y_train_whole[i], Lambda_k[i], Z_k)
                 pln_net[i].pln[num_layer].O_l = O_matrix[i]
         
-            Z_k = admm_decent_Only_Z_Onetime(Lambda_k, O_matrix, Q, proj_coef=10*num_nodes)
+            Z_k = admm_decent_Only_Z_Onetime(Lambda_k, O_matrix, Q, proj_coef=10*num_nodes) #TODO: Motivating choice of epsilon
                 #update lambda
             for i in range(num_nodes):
                 Lambda_k[i] = Lambda_k[i] + O_matrix[i] - Z_k
@@ -109,22 +99,22 @@ def optimize_O_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, X_test,Y
 
             if np.mean(error) < Th:
                 #cnvge_flag = True
-                print("Converge!")
+                #print("Converge!")
                 break
                         
-        print("Threshold:", Th)
-        print("Residual error difference of O matrix:{}".format(error))
+        #print("Threshold:", Th)
+        #print("Residual error difference of O matrix:{}".format(error))
 
         #print("One round iteration")
         
         print("Layer:", num_layer+1, "Done")
         #print(Z_k)
        
-        print("Number of layer{}: O After joint optimization:".format(num_layer+1))
+        #print("Number of layer{}: O After joint optimization:".format(num_layer+1))
         for i in range(num_nodes):
             predicted_lbl_test = pln_net[i].compute_test_outputs(X_test)
-            print("Testing Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test, Y_test)))
-            print("Testing NME:{}\n".format(compute_NME(predicted_lbl_test, Y_test))) 
+            print("Node No. : {}, Testing Accuracy:{}\n".format(i+1, compute_accuracy(predicted_lbl_test, Y_test)))
+            print("Node No. : {}, Testing NME:{}\n".format(i+1, compute_NME(predicted_lbl_test, Y_test))) 
 
     return pln_net
 
@@ -140,11 +130,11 @@ def optimize_W_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, rho: np.
     
     Z_k = np.mean(W_matrix)
 
-    num= Y_train_whole[0].shape[0]
-    eps0 = alpha*np.sqrt(2* num)
-    Th= eps0*1e-4
+    num = Y_train_whole[0].shape[0]
+    eps0 = alpha*np.sqrt(2*num)
+    Th = eps0*1e-4 #TODO: Motivating choice of eps0??
     
-    for _ in range(pln_net[0].max_iterations*5):
+    for _ in range(pln_net[0].max_iterations*1):
         error = np.array([0.0]*num_nodes)
         for i in range(num_nodes):
             # Optimize O matrix first
@@ -153,6 +143,7 @@ def optimize_W_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, rho: np.
         
         Z_k = admm_decent_Only_Z0_Onetime(Lambda_k, W_matrix, num_nodes)
             #update lambda
+        
         for i in range(num_nodes):
             Lambda_k[i] = Lambda_k[i] + W_matrix[i] - Z_k
             error[i] += np.linalg.norm(W_matrix[i] - Z_k)
@@ -163,8 +154,8 @@ def optimize_W_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, rho: np.
             print("Converge!")
             break
 
-    print("Threshold:", Th)
-    print("Residual error difference of O matrix:{}".format(error))
+    #print("Threshold:", Th)
+    #print("Residual error difference of O matrix:{}".format(error))
     #print("Residual error difference of O matrix:{}".format(error))
 
     return pln_net
@@ -183,20 +174,20 @@ def train_decentralized_networks(X_train_whole, Y_train_whole, X_test, Y_test, Q
         pln_all[i].construct_W(X_train_whole[i], Y_train_whole[i])
 
 
-    print("W_ls Before joint optimization:")
+    #print("W_ls Before joint optimization:")
 
     for i in range(num_nodes):
         predicted_lbl_test = pln_all[i].compute_test_outputs(X_test)
-        print("Testing Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test, Y_test)))
-        print("Testing NME:{}\n".format(compute_NME(predicted_lbl_test, Y_test))) 
+        #print("Node No. : {}, Testing Accuracy:{}\n".format(i+1, compute_accuracy(predicted_lbl_test, Y_test)))
+        #print("Node No. : {}, Testing NME:{}\n".format(i+1, compute_NME(predicted_lbl_test, Y_test))) 
         
     pln_all = optimize_W_steps(pln_all, X_train_whole, Y_train_whole)
 
     print("W_ls After joint optimization:")
     for i in range(num_nodes):
         predicted_lbl_test = pln_all[i].compute_test_outputs(X_test)
-        print("Testing Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test, Y_test)))
-        print("Testing NME:{}\n".format(compute_NME(predicted_lbl_test, Y_test))) 
+        print("Node No. : {}, Testing Accuracy:{}\n".format(i+1, compute_accuracy(predicted_lbl_test, Y_test)))
+        print("Node No. : {}, Testing NME:{}\n".format(i+1, compute_NME(predicted_lbl_test, Y_test))) 
     # ADMM implenmentation for W matrix.
 
     pln_all = optimize_O_steps(pln_all, X_train_whole, Y_train_whole, X_test, Y_test, Q)
@@ -205,7 +196,7 @@ def train_decentralized_networks(X_train_whole, Y_train_whole, X_test, Y_test, Q
 
 def train_centralized_networks(X_train, Y_train, X_test, Y_test, Q):  # X_test, Y_test,
     
-    pln_net= PLN_network(num_layer = 10,mu=0.1, maxit=100)
+    pln_net= PLN_network(num_layer = 10, mu=0.1, maxit=100)
     
     pln_net.construct_W(X_train, Y_train)
     
@@ -222,30 +213,95 @@ def train_centralized_networks(X_train, Y_train, X_test, Y_test, Q):  # X_test, 
         #pln_net.construct_all_layers(X_train, Y_train, Q)  
     return pln_net
 
+def split_data_uniform(X_train, Y_train, num_nodes):
+    
+    # Splitting the data uniformly such that each node has roughly equal number of samples from each class
+    # Within the class the number of samples might differs
+    num_classes = Y_train.shape[0] # no. of classes
+    indices_array = [] # List for calculating indices for every class index
+    
+    # Indices corresponding to every class
+    for i in range(num_classes):
+        indices = np.argwhere((Y_train[i,:] == 1)==True)
+        indices_array.append(indices)
+
+    # Getting the data on a per class basis
+    X_train_per_class = []
+    Y_train_per_class = []
+
+    for i in range(len(indices_array)):
+
+        indices_class_i = indices_array[i] # Getting the list of indices for class i
+        # Getting the training and testing data for class i
+        x_train_i = X_train[:,indices_class_i]
+        y_train_i = Y_train[:,indices_class_i] 
+        X_train_per_class.append(x_train_i.reshape((X_train.shape[0], len(indices_class_i))))
+        Y_train_per_class.append(y_train_i.reshape((Y_train.shape[0], len(indices_class_i))))
+    
+    # Getting the data for every node
+    indices_per_node = []
+
+    for i in range(len(indices_array)):
+        # List of list of indices for every class
+        indices_class_i = indices_array[i].reshape(-1,) # Getting the list of indices for class i
+        random.shuffle(indices_class_i)
+        indices_per_node_class_i = np.array_split(indices_class_i, num_nodes)
+        indices_per_node.append(indices_per_node_class_i) 
+
+    X_train_whole = []
+    Y_train_whole = []
+
+    for i in range(num_nodes):
+        
+        X_train_per_node = []
+        Y_train_per_node = []
+        
+        for j in range(len(indices_per_node)):
+            
+            indices_for_node_i_per_class = indices_per_node[j]
+            X_train_per_node.append(X_train[:,indices_for_node_i_per_class[i]])
+            Y_train_per_node.append(Y_train[:,indices_for_node_i_per_class[i]])
+        
+        X_train_whole.append(np.column_stack(X_train_per_node))
+        Y_train_whole.append(np.column_stack(Y_train_per_node))
+
+    return X_train_whole, Y_train_whole
+
 def main():
 
-    dataset_path = "" # Specify the dataset path in the Local without the name
+    dataset_path = "../../Datasets/" # Specify the dataset path in the Local without the name
     dataset_name = "Vowel" # Specify the Dataset name without extension (implicitly .mat extension is assumed)
     X_train, Y_train, X_test, Y_test, Q = importData(dataset_path, dataset_name) # Imports the data with the no. of output classes
     num_nodes=5
-    X_train_whole, Y_train_whole = split_training_set(X_train, Y_train, num_nodes)
+    #X_train_whole, Y_train_whole = split_training_set(X_train, Y_train, num_nodes)
+    X_train_whole, Y_train_whole = split_data_uniform(X_train, Y_train, num_nodes)
     # return    X_train_whole[0:4]  and  Y_train_whole[0:4]
 
 
-    print("*****************Centralized Version*****************")
+    print("***************** Centralized Version *****************")
     pln_cent = train_centralized_networks(X_train, Y_train, X_test, Y_test, Q)
-    predicted_lbl_test = pln_cent.compute_test_outputs(X_test)
-    print("Test Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test, Y_test)))
-    print("Test NME:{}\n".format(compute_NME(predicted_lbl_test, Y_test))) 
+    predicted_lbl_test_cent = pln_cent.compute_test_outputs(X_test)
     
-    print("*****************Decentralized Version*****************")
+    print("***************** Decentralized Version *****************")
     pln_decent = train_decentralized_networks(X_train_whole, Y_train_whole, X_test, Y_test, Q)
     
+    test_acc_consensus = []
+    test_nme_consensus = []
     for i in range(num_nodes):
         predicted_lbl_test = pln_decent[i].compute_test_outputs(X_test)
         print("Network No.{}. Test Accuracy:{}\n".format(i, compute_accuracy(predicted_lbl_test, Y_test)))
         print("Network No.{}. Test NME:{}\n".format(i, compute_NME(predicted_lbl_test, Y_test))) 
-
+        test_acc_consensus.append(compute_accuracy(predicted_lbl_test, Y_test))
+        test_nme_consensus.append(compute_NME(predicted_lbl_test, Y_test))
+    
+    print("**************** Final Results ************************")
+    print("Test Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test_cent, Y_test)))
+    print("Test NME:{}\n".format(compute_NME(predicted_lbl_test_cent, Y_test))) 
+    
+    print("**************** Final Results ************************")
+    print("Mean Test Accuracy (Decentralised):{}".format(np.mean(np.array(test_acc_consensus))))
+    print("Mean Test NME (Decentralised):{}".format(np.mean(np.array(test_nme_consensus))))
+    
     return None
 
 if __name__ == "__main__":

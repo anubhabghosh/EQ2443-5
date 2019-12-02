@@ -3,6 +3,22 @@ import sklearn as sk
 from Admm import admm_sameset, optimize_admm
 from func_set import compute_NME, compute_accuracy
 
+##################################################################
+# Class for initialising the PLN objects in every layer
+
+# Attributes:
+# Q : no. of output classes
+# X : Input data (can be raw input or hidden activation)
+# layer_no :  Layer No. of the current PLN object
+# n_hidden : No. of hidden nodes for that layer
+
+# Functions:
+# activation_function: Implements ReLU activation
+# initialise_random_matrix : Implements Random matrix for every 
+# layer
+# Normalisation :  Magnitude normalisation for Random Matrix
+##################################################################
+
 class PLN():
     
     # Initialises all parameters for each layer of PLN/SSFN
@@ -33,45 +49,46 @@ class PLN():
     def normalization(self, A):
         return A / np.sum(A**2, axis=0, keepdims=True)**(1/2)
 
-
-
-
+################################################################
 # pln: a list containing all pln layers. Or: an empty list
 # W: the corresponding W matrix, or en empty np.array
 
-# structure
+# Structure: 
 #   pln: a list containing all the PLN layers.
 #   num_layer: number of layers
 #   W_ls : linear mapping matrix in layer 0
 #   mu : ADMM learning rate relevant
 #   lamba : wls training factors avoiding overfitting
 #   max_iterations : Maximum number of iteration in ADMM
+################################################################
 
 class PLN_network():
+
+    # Contsructor function to initialise a PLN object
     def __init__(self, pln: np.array=None,W_ls: np.array=None,num_layer: int=20, mu=0.1, maxit=30, lamba=1e2):    
         
         if pln is not None:
             self.num_layer = len(pln)
             for i in range(self.num_layer):
-                if type(pln[i]) != PLN:
+                if type(pln[i]) != PLN: # If the list contains garbage values, it is initialised properly
                     self.pln=None
                     print("Construct Error!")
                     return
-                self.pln[i] = pln[i]    # self.pln[i].O_l
+                self.pln[i] = pln[i]    # self.pln[i].O_l, Assigning the list a PLN object if datatype matches
         else:
-            self.num_layer = num_layer
-            self.pln = np.array([None]*self.num_layer)
+            # If no PLN network is already constructed, assigns new variables
+            self.num_layer = num_layer # Assigns the number of layers
+            self.pln = np.array([None]*self.num_layer) # Assigns an empty list
 
-
+        # Assigning the value of W_ls (or O* for Layer 0)
         if W_ls is not None:
-            self.W_ls=W_ls
+            self.W_ls=W_ls # If the value is already present, no needt to calculate 
         else:
-            self.W_ls=None
-        self.mu = mu # For the given dataset
-        self.max_iterations = maxit # For the ADMM Algorithm
-        self.lam = lamba
+            self.W_ls=None # Assigned None, will be created later on
 
-
+        self.mu = mu # ADMM multiplier for the given dataset
+        self.max_iterations = maxit # No. of iterations for the ADMM Algorithm
+        self.lam = lamba # Lagrangian parameter Lambda
 
     def construct_W(self, X_train, Y_train):
         
@@ -82,9 +99,17 @@ class PLN_network():
         else:
             return
 
-    def construct_one_layer(self,  Y_train, Q, X_train = None, calculate_O = True):
+    # Constructs a single layer of the network
+    def construct_one_layer(self,  Y_train, Q, X_train = None, calculate_O = True, dec_flag = False, R_i = None):
+        
+        # Input arguments
+        # Y_train : Training set targets
+        # Q : number of output classes
+        # X_train : Training set inputs, if None, it is using hidden activation inputs
+        # calculate_O : Flag to check whether O is required to be calculated or not
+
         num_class = Y_train.shape[0] # Number of classes in the given network
-        num_node = 2*num_class + 1000 # Number of nodes in every layer (fixed in this case)
+        num_node = 2*num_class + 100 # Number of nodes in every layer (fixed in this case)
             
         if ((self.pln[0] is None) and (X_train is not None)):    
             # Construct the first layer
@@ -94,6 +119,8 @@ class PLN_network():
             # Compute the top part of the Composite Weight Matrix
             W_top = np.dot(np.dot(self.pln[0].V_Q, self.W_ls), X_train)
             # Compute the Bottom part of the Composite Weight Matrix and inner product with input, along with including normalization
+            if dec_flag == True:
+                self.pln[0].R_l = R_i
             W_bottom = self.pln[0].normalization(np.dot(self.pln[0].R_l, X_train)) # Normalization performed is for the random matrix
             # Concatenating the outputs to form W*X
             pln_l1_Z_l = np.concatenate((W_top, W_bottom), axis=0)
@@ -116,11 +143,13 @@ class PLN_network():
                 return
 
             X = self.pln[num_layers-1].Y_l # Input is the Output g(WX) for the previous layer
-            num_node = 2*Q + 1000 # No. of nodes fixed for every layer
+            num_node = 2*Q + 100 # No. of nodes fixed for every layer
             self.pln[num_layers] = PLN(Q, X, num_layers, num_node) # Creating the PLN Object for the new layer
             # Compute the top part of the Composite Weight Matrix
             W_top = np.dot(np.dot(self.pln[num_layers].V_Q,self.pln[num_layers-1].O_l), X)
             # Compute the bottom part of the Composite Weight Matrix
+            if dec_flag == True:
+                self.pln[num_layers].R_l = R_i
             W_bottom = self.pln[num_layers].normalization(np.dot(self.pln[num_layers].R_l, X))
             # Concatenate the top and bottom part of the matrix
             pln_Z_l = np.concatenate((W_top, W_bottom), axis=0)
@@ -130,13 +159,17 @@ class PLN_network():
             if calculate_O:
                 self.pln[num_layers].O_l = compute_ol(self.pln[num_layers].Y_l, Y_train, self.mu, self.max_iterations, [], False)
         
-    
     # Q is the dimension of the target variable.
     def construct_all_layers(self, X_train, Y_train, Q):   
         for _ in range(0, self.num_layer):
-            self.construct_one_layer(X_train, Y_train, Q)
-        
+            #TODO: Some chabge might be needed
+            # Construct the layers one by one, starting from the layer - 1 to the final layer
+            #self.construct_one_layer(X_train, Y_train, Q)
+            self.construct_one_layer(Y_train, Q, X_train=X_train)
+
+    # This function is used to compute the test outputs for a given test set    
     def compute_test_outputs(self, X_test):
+        
         num_layers = self.num_layer
         W_ls = self.W_ls
         PLN_1 = self.pln[0]
@@ -147,16 +180,19 @@ class PLN_network():
             Z = np.concatenate((W_initial_top, W_initial_bottom), axis=0)
             y = PLN_1.activation_function(Z)
         elif W_ls is not None:
+            # In case only the layer 0 is present, then only the test output after least sqaures is computed
             return  np.dot(W_ls, X_test) 
         else:
+            # In case no layer is computed
             print("W_ls not calculated!")
             return None
     
         # Computes the network output for each layer after the first layer
         # modify
         for i in range(1, num_layers):
-            PLN_1 = self.pln[i]
+            PLN_1 = self.pln[i] # Gets the PLN object for the zeroth layer
             if PLN_1 is not None:
+                #TODO: y is not changed, so performance won't improve
                 W_top = np.dot(np.dot(PLN_1.V_Q, self.pln[i-1].O_l), y)
                 W_bottom = PLN_1.normalization(np.dot(PLN_1.R_l, y))
                 Z = np.concatenate((W_top, W_bottom), axis=0)
@@ -172,9 +208,11 @@ def compute_ol(Y,T,mu, max_iterations, O_prev, flag):
 
     # Computes the Output matrix by calling the ADMM Algorithm function with given parameters
     if flag:
+        # rho is ADMM multiplier for LwF constraint
         rho = 100
         ol = admm_sameset(T, Y, mu, max_iterations, O_prev, rho)
         return ol
+    # If LwF is not required, it is only sufficient to optimize a simple ADMM
     ol = optimize_admm(T, Y, mu, max_iterations)
     return ol
 
