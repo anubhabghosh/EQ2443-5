@@ -1,3 +1,13 @@
+########################################################################
+# Project Name: Decentralised Deep Learning without Forgetting 
+# Creators: Anubhab Ghosh (anubhabg@kth.se)
+#           Peng Liu (peliu@kth.se)
+#           Yichen Yang (yyichen@kth.se)
+#           Tingyi Li (tingyi@kth.se)
+# Project Owners: Alireza Mahdavi Javid (almj@kth.se),
+#                Xinyue Liang (xinyuel@kth.se)
+# December 2019
+#########################################################################
 ########################################################################################
 # Implement Learning Without Forgetting in PLN
 # Case: Both the Old and New Datasets are derived from the same class
@@ -11,8 +21,9 @@ import sklearn as sk
 import sklearn.linear_model
 import scipy.io as sio
 from PLN_Class import PLN
-from Admm import optimize_admm, admm_sameset
+from Admm import optimize_admm
 from LoadDataFromMat import importData
+from LwF_based_ADMM import LwF_based_ADMM_LS_Diff
 import numpy as np
 import random
 import copy
@@ -101,6 +112,25 @@ def splitdatarandom(Data, Labels, split_percent=0.5):
     assert Labels_1.shape[0] == Labels_2.shape[0]
 
     return Data_1, Data_2, Labels_1, Labels_2
+
+def compute_joint_datasets(X1_train, X2_train, Y1_train, Y2_train):
+    
+    # Row and Column wise appending
+
+    X1_train_padded = np.concatenate((X1_train, np.zeros((int(X2_train.shape[0] - X1_train.shape[0]), X1_train.shape[1]))),axis=0)
+    Y1_train_padded = np.concatenate((Y1_train, np.zeros((Y1_train.shape[0], Y2_train.shape[1]))),axis=1)
+    Y2_train_padded = np.concatenate((np.zeros((Y2_train.shape[0], Y1_train.shape[1])), Y2_train),axis=1)
+    X_joint_train = np.concatenate((X1_train_padded, X2_train), axis=1)
+    Y_joint_train = np.concatenate((Y1_train_padded, Y2_train_padded), axis=0)
+
+    return X_joint_train, Y_joint_train
+
+def untwine_weights(Wls_joint_train, X1_train, Y1_train, X2_train, Y2_train):
+
+    Wls_1_joint_train = Wls_joint_train[0:Y1_train.shape[0], 0:X1_train.shape[0]]
+    Wls_2_joint_train = Wls_joint_train[-Y2_train.shape[0]:, -X2_train.shape[0]:]
+
+    return Wls_1_joint_train, Wls_2_joint_train
 
 #######################################################################################################
 # Function to Plot variation of test accuracy versus hyperparameter
@@ -397,64 +427,59 @@ def main():
     # Dataset related parameters
     dataset_path = "../../Datasets/" # Specify the dataset path in the Local without the name
     dataset_name = "Vowel" # Specify the Dataset name without extension (implicitly .mat extension is assumed)
-    X_train, Y_train, X_test, Y_test, Q = importData(dataset_path, dataset_name) # Imports the data with the no. of output classes
+    dataset_1_name = "Vowel" # Specify the Dataset name without extension (implicitly .mat extension is assumed)
+    dataset_2_name = "ExtendedYaleB"
+
+    # Importing parameters for the first Dataset (Old)
+    X1_train, Y1_train, X1_test, Y1_test, Q1 = importData(dataset_path, dataset_1_name) 
+    # Importing parameters for the second Dataset (New)
+    X2_train, Y2_train, X2_test, Y2_test, Q2 = importData(dataset_path, dataset_2_name) 
     
-    mu = 1e3 # For the given dataset
-    lambda_ls = 1e2 # Given regularization parameter as used in the paper for the used Dataset
-    no_layers = 20 # Total number of layers to be used (fixed by default)
-    print("Dataset Used: {}, No. of layers:{}".format(dataset_name, no_layers))
-    
+    # Parameters for the First Dataset
+    mu1 = 1e3 # For the given dataset
+    lambda_ls1 = 1e2 # Given regularization parameter as used in the paper for the used Dataset
+
+    # Parameters for the Second Dataset
+    mu2 = 1e3 # For the given dataset
+    lambda_ls2 = 1e4 # Given regularization parameter as used in the paper for the used Dataset
     ##########################################################################################
-    # Splits the data randomly into two disjoint datasets (by default random_split% = 0.5)
-    X_train_1, X_train_2, Y_train_1, Y_train_2 = splitdatarandom(X_train, Y_train) # Dataset T_old: X_train_1, Y_train_1, X_test_1, Y_test_1
-    X_test_1, X_test_2, Y_test_1, Y_test_2 = splitdatarandom(X_test, Y_test) # Dataset T_new: X_train_2, Y_train_2, X_test_2, Y_test_2
-    print("Data has been split")
 
     ##########################################################################################
     # Parameters related to ADMM optimization
     max_iterations = 100 # For the ADMM Algorithm
+    no_layers = 1
     ##########################################################################################
     
     ##########################################################################################
-    # Run ADMM Optimization for the whole dataset to get a baseline
-    print("Baseline : Total Dataset")
-    PLN_total_dataset, final_test_acc_bl, final_test_nme_bl, PLN_no_layers, Wls_total_dataset = PLN_with_ADMM(X_train, Y_train, X_test, \
-                                                                                           Y_test,  no_layers, max_iterations, lambda_ls, mu) 
-    predicted_lbl = compute_test_outputs(PLN_total_dataset, Wls_total_dataset, no_layers, X_test) # For the entire network
-    print("Final Test Accuracy on T1 + T2:{}".format(compute_accuracy(predicted_lbl, Y_test)))
     
-    #for _ in range(10):
-    
-    # Run ADMM Optimization for the first half dataset (no LwF)
+    # Run ADMM Optimization for the first dataset (no LwF)
     print("First Dataset, no LWF")
-    PLN_first_dataset, final_test_acc_1, final_test_nme_1, PLN_no_layers_1, Wls_1 = PLN_with_ADMM(X_train_1, Y_train_1, X_test_1, \
-                                                                                           Y_test_1, no_layers, max_iterations, lambda_ls, mu) 
+    PLN_first_dataset, final_test_acc_1, final_test_nme_1, PLN_no_layers_1, Wls_1 = PLN_with_ADMM(X1_train, Y1_train, X1_test, \
+                                                                                           Y1_test, no_layers, max_iterations, lambda_ls1, mu1) 
 
-    predicted_lbl = compute_test_outputs(PLN_first_dataset, Wls_1, no_layers, X_test_1) # For the 1st half
-    print("Final Test Accuracy for T1:{}".format(compute_accuracy(predicted_lbl, Y_test_1)))
+    predicted_lbl = compute_test_outputs(PLN_first_dataset, Wls_1, no_layers, X1_test) # For the 1st dataset
+    print("Final Test Accuracy for T1:{}".format(compute_accuracy(predicted_lbl, Y1_test)))
 
     # Run ADMM Optimization for the second half dataset (no LwF)
     print("Second Dataset, no LWF")
-    PLN_second_dataset, final_test_acc_2, final_test_nme_2, PLN_no_layers_2, Wls_2 = PLN_with_ADMM(X_train_2, Y_train_2, X_test_2, \
-                                                                                        Y_test_2, no_layers, max_iterations, lambda_ls, mu) 
+    PLN_second_dataset, final_test_acc_2, final_test_nme_2, PLN_no_layers_2, Wls_2 = PLN_with_ADMM(X2_train, Y2_train, X2_test, \
+                                                                                        Y2_test, no_layers, max_iterations, lambda_ls2, mu2) 
     
-    predicted_lbl = compute_test_outputs(PLN_second_dataset, Wls_2, no_layers, X_test_2) # For the 2nd half
-    print("Final Test Accuracy for T2:{}".format(compute_accuracy(predicted_lbl, Y_test_2)))
+    predicted_lbl = compute_test_outputs(PLN_second_dataset, Wls_2, no_layers, X2_test) # For the 2nd half
+    print("Final Test Accuracy for T2:{}".format(compute_accuracy(predicted_lbl, Y2_test)))
 
-    # Run ADMM Optimization for the second half dataset (no LwF)
-    print("Implemeting LWF on Second Dataset, learned First Dataset")
-    PLN_LwF_dataset, final_test_acc_LwF, final_test_nme_LwF, PLN_no_layers_LwF, Wls_LWF = PLN_with_ADMM(X_train_2, Y_train_2, X_test_2, Y_test_2,\
-                                                            no_layers, max_iterations, lambda_ls, mu, O_prev_array=PLN_first_dataset,\
-                                                            flag=True, W_ls_prev=Wls_1, Sweep=True, mu_Layers_LwF=None)
+    # Run ADMM optimizatin for the joint datasets (no LwF)
+    X_joint_train, Y_joint_train = compute_joint_datasets(X1_train, X2_train, Y1_train, Y2_train)
+    X_joint_test, Y_joint_test = compute_joint_datasets(X1_test, X2_test, Y1_test, Y2_test)
+
+    mu_jt = 1e3 
+    lambda_jt = 1e3
+    print("Joint Training for Datasets T1 and T2, without LwF")
+    PLN_total_datasets, final_test_acc_jt, final_test_nme_jt, PLN_no_layers_jt, Wls_jt = PLN_with_ADMM(X_joint_train, Y_joint_train, X_joint_test, \
+                                                                                        Y_joint_test, no_layers, max_iterations, lambda_jt, mu_jt) 
     
-    predicted_lbl_2 = compute_test_outputs(PLN_LwF_dataset, Wls_LWF, no_layers, X_test_2) # For the 2nd half
-    print("Final Test Accuracy for T2:{}".format(compute_accuracy(predicted_lbl_2, Y_test_2)))
-
-    predicted_lbl_1 = compute_test_outputs(PLN_LwF_dataset, Wls_LWF, no_layers, X_test_1) # For the 1st half
-    print("Final Test Accuracy for T1:{}".format(compute_accuracy(predicted_lbl_1, Y_test_1)))
-
-    predicted_lbl = compute_test_outputs(PLN_LwF_dataset, Wls_LWF, no_layers, X_test) # For the Complete Dataset
-    print("Final Test Accuracy on T1 + T2:{}".format(compute_accuracy(predicted_lbl, Y_test)))
+    predicted_lbl = compute_test_outputs(PLN_total_datasets, Wls_jt, no_layers, X_joint_test) # For the 2nd half
+    print("Final Test Accuracy for T1 + T2 (joint):{}".format(compute_accuracy(predicted_lbl, Y_joint_test)))
 
     return None
 

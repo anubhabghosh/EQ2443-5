@@ -204,12 +204,14 @@ def optimize_O_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, X_test,Y
                 
                     for i in range(num_nodes): 
                         
-                        node_list_i = np.array(np.nonzero(H_fault[i,:]))
-                        node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                        #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                        node_list_i = np.array([0,1,2,3,4])
+                        #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
                         Lambda_k_update = Lambda_k[node_list_i]
                         O_matrix_update = O_matrix[node_list_i]
                         num_node = len(node_list_i)
-                        Z_k[i] = admm_decent_Only_Z_Onetime(Lambda_k_update, O_matrix_update, Q, num_node, alpha = 2, proj_coef=10*num_nodes, fault_flag=fault_flag) #TODO: Motivating choice of epsilon
+                        index = H_fault[i,:]
+                        Z_k[i] = admm_decent_Only_Z_Onetime_ft(index,Lambda_k_update, O_matrix_update, Q, num_node, alpha = 2, proj_coef=10*num_nodes, fault_flag=fault_flag) #TODO: Motivating choice of epsilon
 
                     for b in range(B + 5):
                         #print("Convergence of Z in progress, Iteration : {}". format(b))
@@ -226,10 +228,16 @@ def optimize_O_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, X_test,Y
                         #else:
                         
                         for i in range(num_nodes):           
-                            node_list_i = np.array(np.nonzero(H_fault[i,:]))
-                            node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                            #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                            #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                            node_list_i = np.array([0,1,2,3,4])
                             Z_k_update = Z_k[node_list_i]
-                            Z_k[i] = np.sum(Z_k_update) * (1.0/len(node_list_i))
+                            idx = H_fault[i,:]
+                            summation = np.zeros((Z_k_update[0].shape[0],Z_k_update[0].shape[1]))
+                            for j in range(num_nodes):
+                                summation += idx[j]*Z_k_update[j]
+                            Z_k[i] = summation/1
+                            #Z_k[i] = np.sum(Z_k_update) * (1.0/len(node_list_i))
                     
                     
                     for i in range(num_nodes):
@@ -347,15 +355,21 @@ def optimize_O_steps_Lwf(pln_net:PLN_network, X_train_whole, Y_train_whole, X_te
                         Z_k[i] = admm_decent_Only_Z_Onetime(Lambda_k, O_matrix_new, Q, num_node, alpha = 2, proj_coef=10*num_nodes, fault_flag=fault_flag) #TODO: Motivating choice of epsilon
             
                 elif fault_flag == True:
-                
+        
+
+
                     for i in range(num_nodes): 
-                        
-                        node_list_i = np.array(np.nonzero(H_fault[i,:]))
-                        node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                        node_list_i = np.array([0,1,2,3,4])
+                        #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                        #num_node = len(node_list_i)
+                        index = H_fault[i,:]
+                        #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                        #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
                         Lambda_k_update = Lambda_k[node_list_i]
                         O_matrix_update = O_matrix_new[node_list_i]
                         num_node = len(node_list_i)
-                        Z_k[i] = admm_decent_Only_Z_Onetime(Lambda_k_update, O_matrix_update, Q, num_node, alpha = 2, proj_coef=10*num_nodes, fault_flag=fault_flag) #TODO: Motivating choice of epsilon
+                        index = H_fault[i,:]
+                        Z_k[i] = admm_decent_Only_Z_Onetime_ft(index,Lambda_k_update, O_matrix_update, Q, num_node, alpha = 2, proj_coef=10*num_nodes, fault_flag=fault_flag) #TODO: Motivating choice of epsilon
 
                     for b in range(B + 5):
                         #print("Convergence of Z in progress, Iteration : {}". format(b))
@@ -372,10 +386,16 @@ def optimize_O_steps_Lwf(pln_net:PLN_network, X_train_whole, Y_train_whole, X_te
                         #else:
                         
                         for i in range(num_nodes):           
-                            node_list_i = np.array(np.nonzero(H_fault[i,:]))
-                            node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                            #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                            #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                            node_list_i = np.array([0,1,2,3,4])
                             Z_k_update = Z_k[node_list_i]
-                            Z_k[i] = np.sum(Z_k_update) * (1.0/len(node_list_i))
+                            idx = H_fault[i,:]
+                            summation = np.zeros((Z_k_update[0].shape[0],Z_k_update[0].shape[1]))
+                            for j in range(num_nodes):
+                                summation += idx[j]*Z_k_update[j]
+                            Z_k[i] = summation/1
+                            #Z_k[i] = np.sum(Z_k_update) * (1.0/len(node_list_i))
                     
                     
                     for i in range(num_nodes):
@@ -465,12 +485,15 @@ def optimize_W_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, rho: np.
                 print("ADMM_Iteration No.:{}, Activated Fault".format(k))
                 for i in range(num_nodes): 
                     
-                    node_list_i = np.array(np.nonzero(H_fault[i,:]))
-                    node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                    #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                    node_list_i = np.array([0,1,2,3,4])
+                    #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                    
                     Lambda_k_update = Lambda_k[node_list_i]
                     W_matrix_update = W_matrix[node_list_i]
-                    num_node = int(1.0 / H_fault[i,i])
-                    Z_k[i] = admm_decent_Only_Z0_Onetime(Lambda_k_update, W_matrix_update, num_node, rho, lambda_rate)
+                    #num_node = int(1.0 / H_fault[i,i])
+                    index = H_fault[i,:]
+                    Z_k[i] = admm_decent_Only_Z0_Onetime_ft(index,Lambda_k_update, W_matrix_update, num_nodes, rho, lambda_rate)
 
                 for b in range(1, B+1):
 
@@ -487,11 +510,18 @@ def optimize_W_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, rho: np.
 
                     #else:
 
-                    for i in range(num_nodes):           
-                        node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                    for i in range(num_nodes):
+                        #node_list_i = H_fault[i,:]
+                        node_list_i = np.array([0,1,2,3,4])           
+                        #node_list_i = np.array(np.nonzero(H_fault[i,:]))
                         Z_k_update = Z_k[node_list_i]
-                        num_node = int(1.0 / H_fault[i,i])
-                        Z_k[i] = np.sum(Z_k_update) * (1.0/num_node)
+                        #num_node = int(1.0 / H_fault[i,i])
+                        idx = H_fault[i,:]
+                        summation = np.zeros((Z_k_update[0].shape[0],Z_k_update[0].shape[1]))
+                        for j in range(num_nodes):
+                            summation += idx[j]*Z_k_update[j]
+                        Z_k[i] = summation/1
+                        #Z_k[i] = np.sum(Z_k_update) * (1.0/num_node)
                 
         #Z_k = admm_decent_Only_Z0_Onetime(Lambda_k, W_matrix, num_nodes, rho, lambda_rate)
             
@@ -506,10 +536,10 @@ def optimize_W_steps(pln_net:PLN_network, X_train_whole, Y_train_whole, rho: np.
 
         # Z is the average! all the O matrix should converge to Z!
 
-        if np.mean(error) < Th:
+        #if np.mean(error) < Th:
             #cnvge_flag = True
-            print("Converge!")
-            break
+        #    print("Converge!")
+        #    break
 
     #print("Threshold:", Th)
     #print("Residual error difference of O matrix:{}".format(error))
@@ -585,12 +615,14 @@ def optimize_W_steps_Lwf(pln_net:PLN_network, X_train_whole, Y_train_whole, pln_
                 print("ADMM_Iteration No.:{}, Activated Fault".format(k))
                 for i in range(num_nodes): 
                     
-                    node_list_i = np.array(np.nonzero(H_fault[i,:]))
-                    node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                    #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                    #node_list_i = node_list_i.reshape((node_list_i.shape[1],))
+                    node_list_i = np.array([0,1,2,3,4])
                     Lambda_k_update = Lambda_k[node_list_i]
                     W_matrix_update = W_matrix_new[node_list_i]
-                    num_node = int(1.0 / H_fault[i,i])
-                    Z_k[i] = admm_decent_Only_Z0_Onetime(Lambda_k_update, W_matrix_update, num_node, rho, lambda_rate)
+                    #num_node = int(1.0 / H_fault[i,i])
+                    index = H_fault[i,:]
+                    Z_k[i] = admm_decent_Only_Z0_Onetime_ft(index,Lambda_k_update, W_matrix_update, num_nodes, rho, lambda_rate)
 
                 for b in range(1, B+1):
 
@@ -606,12 +638,22 @@ def optimize_W_steps_Lwf(pln_net:PLN_network, X_train_whole, Y_train_whole, pln_
                     #        Z_k[i] = admm_decent_Only_Z0_Onetime(Lambda_k_update, W_matrix_update, num_node, rho, lambda_rate)
 
                     #else:
-
+                               
+                        #node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                        
+                        
+                        
                     for i in range(num_nodes):           
-                        node_list_i = np.array(np.nonzero(H_fault[i,:]))
+                        node_list_i = np.array([0,1,2,3,4])
+                        #node_list_i = np.array(np.nonzero(H_fault[i,:]))
                         Z_k_update = Z_k[node_list_i]
-                        num_node = int(1.0 / H_fault[i,i])
-                        Z_k[i] = np.sum(Z_k_update) * (1.0/num_node)
+                        #num_node = int(1.0 / H_fault[i,i])
+                        idx = H_fault[i,:]
+                        summation = np.zeros((Z_k_update[0].shape[0],Z_k_update[0].shape[1]))
+                        for j in range(num_nodes):
+                            summation += idx[j]*Z_k_update[j]
+                        Z_k[i] = summation/1
+                        #Z_k[i] = np.sum(Z_k_update) * (1.0/num_node)
                 
         #Z_k = admm_decent_Only_Z0_Onetime(Lambda_k, W_matrix, num_nodes, rho, lambda_rate)
             
@@ -620,10 +662,10 @@ def optimize_W_steps_Lwf(pln_net:PLN_network, X_train_whole, Y_train_whole, pln_
             Lambda_k[i] = Lambda_k[i] + W_matrix_new[i] - Z_k[i]
             error[i] += np.linalg.norm(W_matrix_new[i] - Z_k[i])
 
-        if np.mean(error) < Th:
+        #if np.mean(error) < Th:
             #cnvge_flag = True
-            print("Converge!")
-            break
+        #    print("Converge!")
+        #    break
 
     #print("Threshold:", Th)
     #print("Residual error difference of O matrix:{}".format(error))
@@ -650,8 +692,8 @@ def train_decentralized_networks(X_train_whole, Y_train_whole, X_test, Y_test, Q
 
     for i in range(num_nodes):
         predicted_lbl_test = pln_all[i].compute_test_outputs(X_test)
-        #print("Node No. : {}, Testing Accuracy:{}\n".format(i+1, compute_accuracy(predicted_lbl_test, Y_test)))
-        #print("Node No. : {}, Testing NME:{}\n".format(i+1, compute_NME(predicted_lbl_test, Y_test))) 
+        print("Node No. : {}, Testing Accuracy:{}\n".format(i+1, compute_accuracy(predicted_lbl_test, Y_test)))
+        print("Node No. : {}, Testing NME:{}\n".format(i+1, compute_NME(predicted_lbl_test, Y_test))) 
         
     pln_all = optimize_W_steps(pln_all, X_train_whole, Y_train_whole, rho, lambda_admm, alpha, H_fault, H_non_fault, fault_flag, B = B)
 
@@ -787,7 +829,8 @@ def compute_mixing_matrix(num_nodes, hidden_nodes = None):
             y = h_ij[1]
             J[x, y] = 0 # Setting those values to be zero
             J[y, x] = 0 # Setting those values to be zero
-
+            J[x, x] = J[x,x]+1
+            J[y, y] = J[y,y]+1
         #J = (J + J.T)/2
         #Num_of_links_actual = num_nodes*2 + 2 - len(hidden_nodes)
         #eig_val, eig_vec = np.linalg.eig(J)
@@ -992,7 +1035,7 @@ def plot_acc_vs_hyperparam(hyperparam_vec, test_acc_vec, title):
 def main():
 
     dataset_path = "../../Datasets/" # Specify the dataset path in the Local without the name
-    dataset_name = "Vowel" # Specify the Dataset name without extension (implicitly .mat extension is assumed)
+    dataset_name = "AR" # Specify the Dataset name without extension (implicitly .mat extension is assumed)
     X_train, Y_train, X_test, Y_test, Q = importData(dataset_path, dataset_name) # Imports the data with the no. of output classes
     num_nodes=5
     num_layers = 10
@@ -1001,15 +1044,16 @@ def main():
     # return    X_train_whole[0:4]  and  Y_train_whole[0:4]
     
     # Formulate the mixing matrix
-    hidden_node_list = [(0,2), (0,3), (1, 4), (1, 3), (2,4)]
+    #hidden_node_list = [(0,2), (0,3), (1, 4), (1, 3), (2,4)]
+    hidden_node_list = [(3,4)]
     #nbd_list = num_nodes * np.ones((num_nodes,1))
     H_fault, H_no_fault, B_iterations = compute_mixing_matrix(num_nodes, hidden_nodes=hidden_node_list)
 
     # Dataset related parameters to be set manually
-    lambda_admm = 1e2 
+    lambda_admm = 1e5 
     mu_centralised = 1e3
-    mu_decentralised = 1e-1 
-    rho = 1e-1
+    mu_decentralised = 1e1
+    rho = 1e-4
     alpha = 2
 
     print("***************** Centralized Version *****************")
@@ -1038,7 +1082,7 @@ def main():
     print("**************** Final Results (Decentralised) ************************")
     print("Mean Test Accuracy (Decentralised):{}".format(np.mean(np.array(test_acc_consensus))))
     print("Mean Test NME (Decentralised):{}".format(np.mean(np.array(test_nme_consensus))))
-    
+    '''
     print("***************** Decentralized Version with Fault Tolerance *****************")
     pln_decent_ft = train_decentralized_networks(X_train_whole, Y_train_whole, X_test, \
                                               Y_test, Q, mu_decentralised, lambda_admm, \
@@ -1053,7 +1097,7 @@ def main():
         print("Network No.{}. Test NME:{}\n".format(i, compute_NME(predicted_lbl_test, Y_test))) 
         test_acc_consensus_ft.append(compute_accuracy(predicted_lbl_test, Y_test))
         test_nme_consensus_ft.append(compute_NME(predicted_lbl_test, Y_test))
-    '''
+    
     print("**************** Final Results (Centralised) ************************")
     print("Test Accuracy:{}\n".format(compute_accuracy(predicted_lbl_test_cent, Y_test)))
     print("Test NME:{}\n".format(compute_NME(predicted_lbl_test_cent, Y_test))) 
@@ -1071,7 +1115,7 @@ def main():
     # Implementation of Centralised Scenario with LwF for Same Datasets
     ##########################################################################################################
     X_old_train, X_new_train, Y_old_train, Y_new_train = splitdatarandom(X_train, Y_train, split_percent=0.5) # Randomly splitting training 
-    
+    '''
     print("***************** Centralized Version (using LwF) *****************")
     
     pln_cent_old = train_centralized_networks(X_old_train, Y_old_train, X_test, Y_test, Q, mu_centralised, num_layers)
@@ -1091,7 +1135,7 @@ def main():
     print("**************** Final Results (Centralised - New, after LwF) ************************")
     print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl_test_cent_new, Y_test)))
     print("Test NME:{}\n".format(compute_NME(predicted_lbl_test_cent_new, Y_test)))                                                                               # set into old and new task
-    
+    '''
     ##########################################################################################################
     # Implementation of Decentralised Scenario with LwF for Same Datasets
     ##########################################################################################################
@@ -1124,10 +1168,17 @@ def main():
     # Implement the LwF with Fault Tolerance
     ########################################################################################
     
-    pln_decent_lwf_old_ft = train_decentralized_networks(X_old_train_whole, Y_old_train_whole, X_test, Y_test, Q, \
+    pln_decent_lwf_old_ft = train_decentralized_networks(X_train_whole, Y_train_whole, X_test, Y_test, Q, \
                                                       mu_decentralised, lambda_admm, rho, alpha, num_layers,\
                                                       H_fault=H_fault, H_non_fault=H_no_fault, fault_flag=True, B=B_iterations)
-
+    test_acc_consensus_LwF_ft_old = []
+    test_nme_consensus_LwF_ft_old = []
+    for i in range(num_nodes):
+        predicted_lbl_test_LwF_ft_old = pln_decent_lwf_old_ft[i].compute_test_outputs(X_test)
+        print("Network No.{}. Test Accuracy:{}\n".format(i, compute_accuracy(predicted_lbl_test_LwF_ft_old, Y_test)))
+        print("Network No.{}. Test NME:{}\n".format(i, compute_NME(predicted_lbl_test_LwF_ft_old, Y_test))) 
+        test_acc_consensus_LwF_ft_old.append(compute_accuracy(predicted_lbl_test_LwF_ft_old, Y_test))
+        test_nme_consensus_LwF_ft_old.append(compute_NME(predicted_lbl_test_LwF_ft_old, Y_test))
 
     mu_optimal = 10
     forgetting_factor_optimal = 1.0
@@ -1149,25 +1200,17 @@ def main():
     print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl_test_cent, Y_test)))
     print("Test NME:{}".format(compute_NME(predicted_lbl_test_cent, Y_test))) 
 
-    print("**************** Final Results (Centralised - New, after LwF) ************************")
-    print("Test Accuracy:{}".format(compute_accuracy(predicted_lbl_test_cent_new, Y_test)))
-    print("Test NME:{}\n".format(compute_NME(predicted_lbl_test_cent_new, Y_test)))   
-    
     print("**************** Final Results (Decentralised) ************************")
     print("Mean Test Accuracy (Decentralised):{}".format(np.mean(np.array(test_acc_consensus))))
     print("Mean Test NME (Decentralised):{}".format(np.mean(np.array(test_nme_consensus))))
-
-    print("**************** Final Results (Decentralised with FT) ************************")
-    print("Mean Test Accuracy (Decentralised with FT):{}".format(np.mean(np.array(test_acc_consensus_ft))))
-    print("Mean Test NME (Decentralised with FT):{}".format(np.mean(np.array(test_nme_consensus_ft))))
 
     print("**************** Final Results (Decentralised after LwF) ************************")
     print("Mean Test Accuracy (Decentralised-LwF):{}".format(np.mean(np.array(test_acc_consensus_LwF))))
     print("Mean Test NME (Decentralised-LwF):{}".format(np.mean(np.array(test_nme_consensus_LwF))))
 
     print("**************** Final Results (Decentralised after LwF with FT) ************************")
-    print("Mean Test Accuracy (Decentralised-LwF-FT):{}".format(np.mean(np.array(test_acc_consensus_LwF_ft))))
-    print("Mean Test NME (Decentralised-LwF-FT):{}".format(np.mean(np.array(test_nme_consensus_LwF_ft))))
+    print("Mean Test Accuracy (Decentralised-LwF):{}".format(np.mean(np.array(test_acc_consensus_LwF_ft))))
+    print("Mean Test NME (Decentralised-LwF):{}".format(np.mean(np.array(test_nme_consensus_LwF_ft))))
 
     return None
 

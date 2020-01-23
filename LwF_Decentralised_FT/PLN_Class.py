@@ -8,10 +8,12 @@
 #                Xinyue Liang (xinyuel@kth.se)
 # December 2019
 #########################################################################
+
 import numpy as np
 import sklearn as sk
-from Admm import admm_sameset, optimize_admm
+from Admm import optimize_admm, admm_sameset_modified, admm_sameset
 from func_set import compute_NME, compute_accuracy
+import matplotlib.pyplot as plt
 
 ##################################################################
 # Class for initialising the PLN objects in every layer
@@ -69,13 +71,14 @@ class PLN():
 #   W_ls : linear mapping matrix in layer 0
 #   mu : ADMM learning rate relevant
 #   lamba : wls training factors avoiding overfitting
+#   rho : ADMM learning rate relevant for computing Wls
 #   max_iterations : Maximum number of iteration in ADMM
 ################################################################
 
 class PLN_network():
 
     # Contsructor function to initialise a PLN object
-    def __init__(self, pln: np.array=None,W_ls: np.array=None,num_layer: int=20, mu=0.1, maxit=30, lamba=1e2):    
+    def __init__(self, pln: np.array=None,W_ls: np.array=None,num_layer: int=20, mu=0.1, maxit=30, lamba=1e2, rho=0.1):    
         
         if pln is not None:
             self.num_layer = len(pln)
@@ -96,27 +99,35 @@ class PLN_network():
         else:
             self.W_ls=None # Assigned None, will be created later on
 
-        self.mu = mu # ADMM multiplier for the given dataset
+        self.mu = mu # ADMM multiplier for the given dataset (for layers after Layer 0)
         self.max_iterations = maxit # No. of iterations for the ADMM Algorithm
         self.lam = lamba # Lagrangian parameter Lambda
+        self.rho = rho # ADMM multiplier for the given dataset (for layers after Layer L)
 
-    def construct_W(self, X_train, Y_train):
+    def construct_W(self, X_train, Y_train, rho=None,  lambda_o = None, LwF_flag=False, W_ls_Old=None, max_iterations=100):
         
         # lam: Given regularization parameter as used in the paper for the used Dataset
-        if self.W_ls is None:
+        if self.W_ls is None and (LwF_flag == False):
+            # Computes the W_ls matrix just by using simple regularised least squares formulation
             inv_matrix = np.linalg.inv(np.dot(X_train, X_train.T)+self.lam*np.eye(X_train.shape[0]))
             self.W_ls = np.dot(np.dot(Y_train, X_train.T), inv_matrix).astype(np.float32)
-        else:
-            return
-
+        elif self.W_ls is None or (LwF_flag == True):
+            # Implements the LwF problem for computing the W_ls for New Dataset, using W_ls for Old Dataset
+            self.W_ls = compute_ol_LwF(X_train, Y_train, rho, lambda_o, max_iterations, W_ls_Old, LwF_flag)
+    
     # Constructs a single layer of the network
-    def construct_one_layer(self,  Y_train, Q, X_train = None, calculate_O = True, dec_flag = False, R_i = None):
+    def construct_one_layer(self,  Y_train, Q, X_train = None, calculate_O = True, dec_flag = False, R_i = None, LwF_flag = False, pln_Old = None, lambda_o = None, mu= None):
         
         # Input arguments
         # Y_train : Training set targets
         # Q : number of output classes
         # X_train : Training set inputs, if None, it is using hidden activation inputs
         # calculate_O : Flag to check whether O is required to be calculated or not
+        # dec_flag : To decide whether to implement the decentralised scenario here or not
+        # R_i : Random matrix to be used (for all nodes) in the i-th layer
+        # LwF_flag :  To choose whether LwF is required to be implemented or not
+        # pln_Old : PLN Network object for the network trained using the 'Old' Dataset
+        # lambda_o : Needs to be used for forgetting factor
 
         num_class = Y_train.shape[0] # Number of classes in the given network
         num_node = 2*num_class + 100 # Number of nodes in every layer (fixed in this case)
@@ -138,20 +149,28 @@ class PLN_network():
             self.pln[0].Y_l = self.pln[0].activation_function(pln_l1_Z_l)
             # Computing the Output Matrix by using 100 iterations of ADMM
             #print("ADMM for Layer No:{}".format(1))
-            if calculate_O:
-                self.pln[0].O_l = compute_ol(self.pln[0].Y_l, Y_train, self.mu, self.max_iterations, [], False)
+            if calculate_O and (LwF_flag==False):
+                # No implementation of LwF
+                self.pln[0].O_l = compute_ol(self.pln[0].Y_l, Y_train, self.mu, self.max_iterations, [], LwF_flag)
+            elif calculate_O or (LwF_flag==True):
+                # Implementation of LwF using the outputs using Old Dataset
+                # Outputs for the previous learned network is given in: pln_Old
+                self.pln[0].O_l = compute_ol_LwF(self.pln[0].Y_l, Y_train, mu, lambda_o, self.max_iterations, pln_Old.pln[0].O_l, LwF_flag)
         else:
+            
             flag = True # mark whether all layers has been constructed
+            
             for i in range(1,self.num_layer):
                 if (self.pln[i] is None):
                     num_layers = i
                     flag = False
                     break
+               
         # if we have 3 layers already existed self.pln[0:2], this index is 3, self.pln[3] is the 4th layer we wanna construct.
             if flag:
                 print("All layers already constructed")
                 return
-
+            
             X = self.pln[num_layers-1].Y_l # Input is the Output g(WX) for the previous layer
             num_node = 2*Q + 100 # No. of nodes fixed for every layer
             self.pln[num_layers] = PLN(Q, X, num_layers, num_node) # Creating the PLN Object for the new layer
@@ -166,13 +185,18 @@ class PLN_network():
             # Apply the activation function
             self.pln[num_layers].Y_l = self.pln[num_layers].activation_function(pln_Z_l)
             # Compute the output matrix using ADMM for specified no. of iterations
-            if calculate_O:
-                self.pln[num_layers].O_l = compute_ol(self.pln[num_layers].Y_l, Y_train, self.mu, self.max_iterations, [], False)
-        
+            if calculate_O and (LwF_flag == False):
+                # No implementation of LwF
+                self.pln[num_layers].O_l = compute_ol(self.pln[num_layers].Y_l, Y_train, self.mu, self.max_iterations, [], LwF_flag)
+            elif calculate_O or (LwF_flag == True):
+                # Implementation of LwF using the outputs using Old Dataset
+                # Outputs for the previous learned network is given in: pln_Old
+                self.pln[num_layers].O_l = compute_ol_LwF(self.pln[num_layers].Y_l, Y_train, mu, lambda_o, self.max_iterations, pln_Old.pln[num_layers].O_l, LwF_flag)    
+
     # Q is the dimension of the target variable.
     def construct_all_layers(self, X_train, Y_train, Q):   
         for _ in range(0, self.num_layer):
-            #TODO: Some chabge might be needed
+            #TODO: Some change might be needed
             # Construct the layers one by one, starting from the layer - 1 to the final layer
             #self.construct_one_layer(X_train, Y_train, Q)
             self.construct_one_layer(Y_train, Q, X_train=X_train)
@@ -226,3 +250,19 @@ def compute_ol(Y,T,mu, max_iterations, O_prev, flag):
     ol = optimize_admm(T, Y, mu, max_iterations)
     return ol
 
+
+# flag: whether implementing LwF or Not.
+def compute_ol_LwF(Y, T, mu, lambda_o, max_iterations, O_prev, flag):
+    # Computes the Output matrix by calling the ADMM Algorithm function with given parameters
+    if flag:
+        ol = admm_sameset_modified(T, Y, mu, max_iterations, O_prev, lambda_o)
+        return ol
+    # If LwF is not required, it is only sufficient to optimize a simple ADMM
+    ol = optimize_admm(T, Y, mu, max_iterations)
+    return ol
+
+def param_tuning_for_LS_decentralised(X, T, rho, max_iterations, W_ls_prev):
+
+    # This function performs parameter tuning for the case of same datasets 
+    rho = None
+    return None

@@ -1,3 +1,13 @@
+########################################################################
+# Project Name: Decentralised Deep Learning without Forgetting 
+# Creators: Anubhab Ghosh (anubhabg@kth.se)
+#           Peng Liu (peliu@kth.se)
+#           Yichen Yang (yyichen@kth.se)
+#           Tingyi Li (tingyi@kth.se)
+# Project Owners: Alireza Mahdavi Javid (almj@kth.se),
+#                Xinyue Liang (xinyuel@kth.se)
+# December 2019
+#########################################################################
 import matplotlib.pyplot as plt
 import sklearn as sk
 import sklearn.linear_model
